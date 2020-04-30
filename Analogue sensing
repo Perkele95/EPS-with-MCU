@@ -1,15 +1,12 @@
 /* ADC Voltmeter for EPS.
- * Continuously monitors voltage and current.
+ * Continuously monitors voltage and current, both intput and output.
  */
 
 // ------- Preamble -------- //
 #include <avr/io.h>
 #include <util/delay.h>
 #include <avr/interrupt.h>
-#include <avr/sleep.h>                           /* for ADC sleep mode */
 #include <math.h>                           /* for round() and floor() */
-
-#include "pinDefines.h"
 
 /* Note: REF_VCC is the internal voltage. */
 #define REF_VCC 1.1
@@ -19,19 +16,26 @@
 
 // -------- Functions --------- //
 void initADC(void) {
-  ADMUX |= (0b00001111 & PB5);                      /* set mux to ADC5 */
   ADMUX |= (1 << REFS1);                  /* reference voltage on internal reference */
+  ADCSRA |= 1<<ADIE;                            /*  enable interrupt    */
   ADCSRA |= (1 << ADPS1) | (1 << ADPS2);    /* ADC clock prescaler /64 */
-  ADCSRA |= (1 << ADEN);                                 /* enable ADC */
+  ADCSRA |= 1<<ADEN;                              /* enable ADC */
+  ADCSRA |= 1<<ADSC;                          /*  start conversion  */
 }
 
-void setupADCSleepmode(void) {
-  set_sleep_mode(SLEEP_MODE_ADC);            /* defined in avr/sleep.h */
-  ADCSRA |= (1 << ADIE);                       /* enable ADC interrupt */
-  sei();                                   /* enable global interrupts */
+ISR(ADC_vect){
+    //get current channel
+    uint8_t currentChannel = ADMUX & 0x0F;
+    //set output compare registers for current channel
+    
+    //loop through channels from 0 to 5 
+    if(currentChannel == 5)
+        selectADCchannel(0x00);
+    else
+        selectADCchannel(currentChannel+1);
+    //restart conversion
+    ADCSRA |= 1<<ADSC;
 }
-
-EMPTY_INTERRUPT(ADC_vect);
 
 uint16_t oversample16x(void) {
   uint16_t oversampledValue = 0;
@@ -46,21 +50,27 @@ uint16_t oversample16x(void) {
 int main(void) {
 
   // ------ variables ------ //
-  float voltage;
-  float Rsvoltage1;
-  float Rsvoltage2;
-  float current;
-  float Rsense = 0.01; // 10 milliohm resistor
+  float voltageIn;
+  float currVoltIn1;        /*  currVolt is voltage measured across Rs.  */
+  float currVoltIn2;
+  float currentIn;
+  
+  float voltageOut;
+  float currVoltOut1;
+  float currVoltOut2;
+  float currentOut;
+  
+  float Rsense = 0.01; // 10 milliohm resistors
+  float sampleValue;
 
   // -------- Inits --------- //
-  initADC();
-  setupADCSleepmode();
-
+  sei();
   // ------ Event loop ------ //
 
   while (1) {
-
+    initADC();
     voltage = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
+    
     Rsvoltage1 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
     Rsvoltage2 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
     current = (Rsvoltage1-Rsvoltage2)/Rsense;
