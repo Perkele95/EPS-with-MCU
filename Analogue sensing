@@ -1,5 +1,5 @@
-/* ADC Voltmeter
- * Continuously monitors voltage.
+/* ADC Voltmeter for EPS.
+ * Continuously monitors voltage and current.
  */
 
 // ------- Preamble -------- //
@@ -11,11 +11,8 @@
 
 #include "pinDefines.h"
 
-/* Note: This voltmeter is only as accurate as your reference voltage.
- * If you want four digits of accuracy, need to measure your AVCC well.
- * Measure either AVCC of the voltage on AREF and enter it here.
-*/
-#define REF_VCC 5.053
+/* Note: REF_VCC is the internal voltage. */
+#define REF_VCC 1.1
                                /* measured division by voltage divider */
 #define VOLTAGE_DIV_FACTOR  3.114
 
@@ -48,7 +45,12 @@ uint16_t oversample16x(void) {
 
 int main(void) {
 
+  // ------ variables ------ //
   float voltage;
+  float Rsvoltage1;
+  float Rsvoltage2;
+  float current;
+  float Rsense = 0.01; // 10 milliohm resistor
 
   // -------- Inits --------- //
   initADC();
@@ -59,6 +61,9 @@ int main(void) {
   while (1) {
 
     voltage = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
+    Rsvoltage1 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
+    Rsvoltage2 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
+    current = (Rsvoltage1-Rsvoltage2)/Rsense;
     _delay_ms(500);
     
   }                                                  /* End event loop */
