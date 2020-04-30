@@ -1,5 +1,5 @@
 /* ADC Voltmeter
- * Continuously outputs voltage over the serial line.
+ * Continuously monitors voltage.
  */
 
 // ------- Preamble -------- //
@@ -10,7 +10,6 @@
 #include <math.h>                           /* for round() and floor() */
 
 #include "pinDefines.h"
-#include "USART.h"
 
 /* Note: This voltmeter is only as accurate as your reference voltage.
  * If you want four digits of accuracy, need to measure your AVCC well.
@@ -23,8 +22,8 @@
 
 // -------- Functions --------- //
 void initADC(void) {
-  ADMUX |= (0b00001111 & PC5);                      /* set mux to ADC5 */
-  ADMUX |= (1 << REFS0);                  /* reference voltage on AVCC */
+  ADMUX |= (0b00001111 & PB5);                      /* set mux to ADC5 */
+  ADMUX |= (1 << REFS1);                  /* reference voltage on internal reference */
   ADCSRA |= (1 << ADPS1) | (1 << ADPS2);    /* ADC clock prescaler /64 */
   ADCSRA |= (1 << ADEN);                                 /* enable ADC */
 }
@@ -47,24 +46,11 @@ uint16_t oversample16x(void) {
   return (oversampledValue >> 2);          /* divide back down by four */
 }
 
-void printFloat(float number) {
-  number = round(number * 100) / 100; /* round off to 2 decimal places */
-  transmitByte('0' + number / 10);                       /* tens place */
-  transmitByte('0' + number - 10 * floor(number / 10));        /* ones */
-  transmitByte('.');
-  transmitByte('0' + (number * 10) - floor(number) * 10);    /* tenths */
-                                                   /* hundredths place */
-  transmitByte('0' + (number * 100) - floor(number * 10) * 10);
-  printString("\r\n");
-}
-
 int main(void) {
 
   float voltage;
 
   // -------- Inits --------- //
-  initUSART();
-  printString("\r\nDigital Voltmeter\r\n\r\n");
   initADC();
   setupADCSleepmode();
 
@@ -73,13 +59,8 @@ int main(void) {
   while (1) {
 
     voltage = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
-    printFloat(voltage);
-    /*  alternatively, just print it out:
-     *  printWord(voltage*100);
-     *  but then you have to remember the decimal place
-     */
     _delay_ms(500);
-
+    
   }                                                  /* End event loop */
   return 0;                            /* This line is never reached */
 }
