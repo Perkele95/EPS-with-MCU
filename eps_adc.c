@@ -28,17 +28,27 @@ ISR(ADC_vect){
     uint8_t currentChannel = ADMUX & 0x0F;
     //set variables based on channel
     switch(currentChannel){
-        case 0x00: voltageIn = ADC;
+        case 0x00: 
+            voltageIn_a = voltageIn_b;    /*  Save the old value first before overwriting _b with new value  */
+            voltageIn_b = ADC*2;          /*  Multiply by two since voltage divider is set to 1/2 */
             break;
         case 0x01: currVoltIn1 = ADC;
             break;
-        case 0x02: currVoltIn2 = ADC;
+        case 0x02:
+            currVoltIn2 = ADC;
+            currentIn_a = currentIn_b;
+            currentIn_b = (currVoltIn1-currVoltIn2)/0.01;   /*  10 milliohm resistor  */
             break;
-        case 0x03: voltageOut = ADC;
+        case 0x03: 
+            voltageOut_a = voltageOut_b;
+            voltageOut_b = ADC*2;
             break;
         case 0x04: currVoltOut1 = ADC;
             break;
-        case 0x05: currVoltOut2 = ADC;
+        case 0x05:
+            currVoltOut2 = ADC;
+            currentout_a = currentOut_b;
+            currentOut_b = (currVoltOut1-currVoltOut2)/0.01;
             break;
     }
     //select next channel, loop around if channel 5
@@ -47,7 +57,7 @@ ISR(ADC_vect){
     else
         selectADCchannel(currentChannel+1);
     }
-    ADCSRA |= 1<<ADSC;              /*  restart conversion  */
+    ADCSRA |= 1<<ADSC;                      /*  restart conversion  */
 }
 
 void selectADCchannel(uint8_t channel){
@@ -57,19 +67,21 @@ void selectADCchannel(uint8_t channel){
 }
 
 int main(void) {
-
+  
   // ------ variables ------ //
-  volatile float voltageIn;
+  volatile float voltageIn_a;
+  volatile float voltageIn_b;
   volatile float currVoltIn1;        /*  currVolt is voltage measured across Rs.  */
   volatile float currVoltIn2;
-  float currentIn;
+  volatile float currentIn_a;
+  volatile float currentIn_b;
   
-  volatile float voltageOut;
+  volatile float voltageOut_a;
+  volatile float voltageOut_b;
   volatile float currVoltOut1;
   volatile float currVoltOut2;
-  float currentOut;
-  
-  float Rsense = 0.01; // 10 milliohm resistors
+  volatile float currentOut_a;
+  volatile float currentOut_b;
 
   // -------- Inits --------- //
   sei();
@@ -77,11 +89,11 @@ int main(void) {
   
   // ------ Event loop ------ //
   while (1) {
-    while (ADCSRA & (1 << ADSC)){           /*  Wait for conversion to finish */
+    for (i = 0; i < 5; i++) {             /*  For loop that cycles through 6 adcs before continuing */
+        while (ADCSRA & (1 << ADSC)){ 
+        }
     }
-    currentIn = (currVoltIn1-currVoltIn2)/Rsense;
-    currentOut = (currVoltOut1-currVoltOut2)/Rsense;
-    _delay_ms(500);
+    _delay_ms(200);
   }
   return 0;                            /* This line is never reached */
 }
