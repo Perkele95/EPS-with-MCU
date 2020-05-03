@@ -26,56 +26,62 @@ void initADC(void) {
 ISR(ADC_vect){
     //get current channel
     uint8_t currentChannel = ADMUX & 0x0F;
-    //set output compare registers for current channel
-    
-    //loop through channels from 0 to 5 
-    if(currentChannel == 5)
+    //set variables based on channel
+    switch(currentChannel){
+        case 0x00: voltageIn = ADC;
+            break;
+        case 0x01: currVoltIn1 = ADC;
+            break;
+        case 0x02: currVoltIn2 = ADC;
+            break;
+        case 0x03: voltageOut = ADC;
+            break;
+        case 0x04: currVoltOut1 = ADC;
+            break;
+        case 0x05: currVoltOut2 = ADC;
+            break;
+    }
+    //select next channel, loop around if channel 5
+    if(currentChannel == 5){
         selectADCchannel(0x00);
     else
         selectADCchannel(currentChannel+1);
-    //restart conversion
-    ADCSRA |= 1<<ADSC;
+    }
+    ADCSRA |= 1<<ADSC;              /*  restart conversion  */
 }
 
-uint16_t oversample16x(void) {
-  uint16_t oversampledValue = 0;
-  uint8_t i;
-  for (i = 0; i < 16; i++) {
-    sleep_mode();                   /* chip to sleep, takes ADC sample */
-    oversampledValue += ADC;                        /* add them up 16x */
-  }
-  return (oversampledValue >> 2);          /* divide back down by four */
+void selectADCchannel(uint8_t channel){
+    //0xE0 is 11100000
+    //0x1F is 00011111
+    ADMUX = (ADMUX & 0xE0) | (channel & 0x1F);
 }
 
 int main(void) {
 
   // ------ variables ------ //
-  float voltageIn;
-  float currVoltIn1;        /*  currVolt is voltage measured across Rs.  */
-  float currVoltIn2;
+  volatile float voltageIn;
+  volatile float currVoltIn1;        /*  currVolt is voltage measured across Rs.  */
+  volatile float currVoltIn2;
   float currentIn;
   
-  float voltageOut;
-  float currVoltOut1;
-  float currVoltOut2;
+  volatile float voltageOut;
+  volatile float currVoltOut1;
+  volatile float currVoltOut2;
   float currentOut;
   
   float Rsense = 0.01; // 10 milliohm resistors
-  float sampleValue;
 
   // -------- Inits --------- //
   sei();
+  initADC();
+  
   // ------ Event loop ------ //
-
   while (1) {
-    initADC();
-    voltage = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
-    
-    Rsvoltage1 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
-    Rsvoltage2 = oversample16x() * VOLTAGE_DIV_FACTOR * REF_VCC / 4096;
-    current = (Rsvoltage1-Rsvoltage2)/Rsense;
+    while (ADCSRA & (1 << ADSC)){           /*  Wait for conversion to finish */
+    }
+    currentIn = (currVoltIn1-currVoltIn2)/Rsense;
+    currentOut = (currVoltOut1-currVoltOut2)/Rsense;
     _delay_ms(500);
-    
-  }                                                  /* End event loop */
+  }
   return 0;                            /* This line is never reached */
 }
