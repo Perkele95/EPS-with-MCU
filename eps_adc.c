@@ -11,7 +11,7 @@
 /* Note: REF_VCC is the internal voltage. */
 #define REF_VCC 1.1
                                /* measured division by voltage divider */
-#define VOLTAGE_DIV_FACTOR  3.114
+#define VOLTAGE_DIV_FACTOR  6
 
 
 // -------- Functions --------- //
@@ -30,29 +30,25 @@ ISR(ADC_vect){
     switch(currentChannel){
         case 0x00: 
             voltageIn_a = voltageIn_b;    /*  Save the old value first before overwriting _b with new value  */
-            voltageIn_b = ADC*2;          /*  Multiply by two since voltage divider is set to 1/2 */
+            voltageIn_b = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             break;
-        case 0x01: currVoltIn1 = ADC;
-            break;
-        case 0x02:
-            currVoltIn2 = ADC;
+        case 0x01:
+            currVoltIn = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             currentIn_a = currentIn_b;
-            currentIn_b = (currVoltIn1-currVoltIn2)/0.01;   /*  10 milliohm resistor  */
+            currentIn_b = (voltageIn_b-currVoltIn)/0.01;   /*  10 milliohm resistor  */
             break;
-        case 0x03: 
+        case 0x02: 
             voltageOut_a = voltageOut_b;
-            voltageOut_b = ADC*2;
+            voltageOut_b = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             break;
-        case 0x04: currVoltOut1 = ADC;
-            break;
-        case 0x05:
-            currVoltOut2 = ADC;
+        case 0x03:
+            currVoltOut2 = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             currentout_a = currentOut_b;
-            currentOut_b = (currVoltOut1-currVoltOut2)/0.01;
+            currentOut_b = (voltageOut_b-currVoltOut)/0.01;
             break;
     }
     //select next channel, loop around if channel 5
-    if(currentChannel == 5){
+    if(currentChannel == 3){
         selectADCchannel(0x00);
     else
         selectADCchannel(currentChannel+1);
@@ -71,15 +67,13 @@ int main(void) {
   // ------ variables ------ //
   volatile float voltageIn_a;
   volatile float voltageIn_b;
-  volatile float currVoltIn1;        /*  currVolt is voltage measured across Rs.  */
-  volatile float currVoltIn2;
+  volatile float currVoltIn;        /*  currVolt is voltage measured after Rs  */
   volatile float currentIn_a;
   volatile float currentIn_b;
   
   volatile float voltageOut_a;
   volatile float voltageOut_b;
-  volatile float currVoltOut1;
-  volatile float currVoltOut2;
+  volatile float currVoltOut;
   volatile float currentOut_a;
   volatile float currentOut_b;
 
@@ -89,7 +83,7 @@ int main(void) {
   
   // ------ Event loop ------ //
   while (1) {
-    for (i = 0; i < 5; i++) {             /*  For loop that cycles through 6 adcs before continuing */
+    for (i = 0; i < 3; i++) {             /*  For loop that cycles through 4 adcs before continuing */
         while (ADCSRA & (1 << ADSC)){ 
         }
     }
