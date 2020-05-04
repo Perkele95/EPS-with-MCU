@@ -2,7 +2,7 @@
 
 #include <avr/io.h>
 #include <util/delay.h>
-#define F_CPU 16000000UL              /* 16 Mhz clock gives a pwm frequency of 125 kHz  */
+#define F_CPU 16000000UL
 
 void initPWM(void){
     // PLL allows for internal 64 MHz clock for timer1
@@ -15,6 +15,7 @@ void initPWM(void){
     TCCR1 |= (1 << PWM1A) | (1 << COM1A1);     /*  non-inverting PWM mode  */
     TCCR1 |= (1 << CS11) | (1 << CS10);     /*  The datasheet says these need to be set if 100 kHz is desired */
     OCR1C = 159;
+    OCR1A = OCR1C / 2;      /*  50% DC. OC1A is set when the counter reaches OCR1A  */
 }
 
 int main(void)
@@ -23,7 +24,7 @@ int main(void)
     initPWM();
     
     while (1){
-      
+        // do nothing
     }
     return 0;
 }
