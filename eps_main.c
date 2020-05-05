@@ -12,6 +12,10 @@
 #define REF_VCC 1.1
 #define VOLTAGE_DIV_FACTOR  6      /* measured division by voltage divider */
 #define RSENSE 0.01
+#define D_increment 1.25      /* Duty cycle increment is multiples of 100/160 = 0.625 */
+#define VBAT_LOW 5.6
+#define VCHARGE 7.2
+#define IBAT_THRESHOLD 1.75  /* 5% of the discharge rate of batteries, or 35/20 */ 
 
 // -------- Functions --------- //
 void initPWM(void){
@@ -24,8 +28,8 @@ void initPWM(void){
     // PWM on OC1A, or pin 6
     TCCR1 |= (1 << PWM1A) | (1 << COM1A1);     /*  non-inverting PWM mode  */
     TCCR1 |= (1 << CS11) | (1 << CS10);     /*  The datasheet says these need to be set if 100 kHz is desired */
-    OCR1C = 159;
-    OCR1A = OCR1C / 2;      /*  50% DC. OC1A is set when the counter reaches OCR1A  */
+    OCR1C = 159;                          /* Count TOP value */
+    OCR1A = OCR1C / 10;      /*  10% DC. OC1A is set when the counter reaches OCR1A  */
 }
 
 void initADC(void) {
@@ -89,25 +93,53 @@ int main(void) {
   volatile float currVoltOut;
   volatile float currentOut_a;
   volatile float currentOut_b;
- 
-  float D = 0.02;
+  
+  float d_u;
+  float d_i:
+  float D = 0.01;
+  int chargeFlag;
 
   // -------- Inits --------- //
   initPWM(); 
   sei();
   initADC();
+  _delay_ms(200);    /* Wait for converter to stabilise */
   
-  // ------ Event loop ------ //
-  while (1) {
-    for (i = 0; i < 3; i++) {             /*  For loop that cycles through 4 adcs before continuing */
+  for (i = 0; i < 3; i++) {             /*  sample adc once to set "a" values to a non-zero value */
         while (ADCSRA & (1 << ADSC)){ 
         }
     }
-    // Compute the MPPT
-    switch(){
-     case: XX: /*do*/ break;
+  
+  // ------ Event loop ------ //
+  while (1) {
+    for (i = 0; i < 3; i++) {             /*  adc sample */
+        while (ADCSRA & (1 << ADSC)){ 
+        }
     }
-    
+    // State monitoring.
+    // First check is battery is being charged or not.
+    // If so, check the current state, whether CC, CV or charge done.
+    if(chargeFlag){
+        if(voltageOut_b >= VCHARGE){
+          if(currentOut_b < IBAT_THRESHOLD){
+            chargeFlag = 0;
+          } else {
+            // Call CV mode
+          }
+        } else {
+          // Call MPPT
+        }
+    }
+    // If not charging, check if charging needs to start because of low voltage.
+    // Start MPPT regardless
+    else{
+        if(voltageOut_b < VBAT_LOW){
+          chargeFlag = 1;
+          // Call MPPT
+        } else {
+          // Call MPPT
+        }
+    }
     _delay_ms(200);
   }
   return 0;
