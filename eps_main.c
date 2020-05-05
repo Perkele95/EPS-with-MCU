@@ -1,5 +1,6 @@
- /* ADC Voltmeter for EPS.
-   Continuously monitors voltage and current, both intput and output. */
+ /* EPS main made for ATtiny45.
+   Continuously monitors voltage and current, both intput and output.
+   PWM is set based on what mode the system is in. */
 
 // ------- Preamble -------- //
 #include <avr/io.h>
@@ -12,10 +13,9 @@
 #define REF_VCC 1.1
 #define VOLTAGE_DIV_FACTOR  6      /* measured division by voltage divider */
 #define RSENSE 0.01
-#define D_increment 1.25      /* Duty cycle increment is multiples of 100/160 = 0.625 */
 #define VBAT_LOW 5.6
 #define VCHARGE 7.2
-#define IBAT_THRESHOLD 1.75  /* 5% of the discharge rate of batteries, or 35/20 */ 
+#define IBAT_THRESHOLD 0.4375  /* 5% of the discharge rate of 4 batteries, or (35/20)/4 */ 
 
 // -------- Functions --------- //
 void initPWM(void){
@@ -29,15 +29,14 @@ void initPWM(void){
     TCCR1 |= (1 << PWM1A) | (1 << COM1A1);     /*  non-inverting PWM mode  */
     TCCR1 |= (1 << CS11) | (1 << CS10);     /*  The datasheet says these need to be set if 100 kHz is desired */
     OCR1C = 159;                          /* Count TOP value */
-    OCR1A = OCR1C / 10;      /*  10% DC. OC1A is set when the counter reaches OCR1A  */
+    OCR1A = OCR1C / 10;                 /*  10% D by default  */
 }
 
 void initADC(void) {
   ADMUX |= (1 << REFS1);                  /* reference voltage on internal reference */
-  ADCSRA |= 1<<ADIE;                            /*  enable interrupt    */
+  ADCSRA |= ( 1 << ADIE);                            /*  enable interrupt    */
   ADCSRA |= (1 << ADPS1) | (1 << ADPS2);    /* ADC clock prescaler /64 */
-  ADCSRA |= 1<<ADEN;                              /* enable ADC */
-  ADCSRA |= 1<<ADSC;                          /*  start conversion  */
+  ADCSRA |= (1 << ADEN);                              /* enable ADC */
 }
 
 ISR(ADC_vect){
@@ -52,35 +51,76 @@ ISR(ADC_vect){
         case 0x01:
             currVoltIn = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             currentIn_a = currentIn_b;
-            currentIn_b = (voltageIn_b-currVoltIn) / RSENSE;   /*  10 milliohm resistor  */
+            currentIn_b = (voltageIn_b - currVoltIn) / RSENSE;   /*  10 milliohm resistor  */
             break;
-        case 0x02: 
-            voltageOut_a = voltageOut_b;
-            voltageOut_b = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
+        case 0x02:
+            voltageOut = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
             break;
         case 0x03:
-            currVoltOut2 = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
-            currentout_a = currentOut_b;
-            currentOut_b = (voltageOut_b-currVoltOut) / RSENSE;
+            currVoltOut = ADC * REF_VCC * VOLTAGE_DIV_FACTOR / 1023;
+            currentOut = (currVoltOut - voltageOut) / RSENSE;
             break;
     }
-    //select next channel, loop around if channel 5
+    //select next channel, loop around if channel 3
     if(currentChannel == 3){
         selectADCchannel(0x00);
-    else
+    } else {
         selectADCchannel(currentChannel+1);
     }
-    ADCSRA |= 1<<ADSC;                      /*  restart conversion  */
 }
 
+// This selects the next output pin based on currentChannel
 void selectADCchannel(uint8_t channel){
     //0xE0 is 11100000
     //0x1F is 00011111
     ADMUX = (ADMUX & 0xE0) | (channel & 0x1F);
 }
 
+// MPPT function sets new duty cycle
+void MPPT(void){
+  d_u = voltageIn_b - voltageIn_a;
+  d_i = currentIn_b - currentIn_a;
+  if(d_u = 0){
+    if(d_i = 0){
+        // do nothing
+      } else {
+        if(d_i > 0){
+          OCR1A -= 1;
+        } else {
+          OCR1A += 1;
+        }
+      }
+  } else {
+    if((d_i/d_u) = (-(currentIn_b/voltageIn_b))){
+      return D;
+    } else {
+      if((d_i/d_u) > (-(currentIn_b/voltageIn_b))){
+        OCR1A -= 1;
+      } else {
+        OCR1A += 1;
+      }
+    }
+  }
+}
+
+// CV mode loop is exited when battery current drops below threshold
+void cvMode(void){
+  while(currentOut > IBAT_THRESHOLD){
+    if(voltageOut < VCHARGE){
+      OCR1A += 1;
+    } else if(voltageOut > VCHARGE) {
+      OCR1A -= 1;
+    }
+    // Sample adc
+    for (i = 0; i < 3; i++) {
+      ADCSRA |= (1 << ADSC);
+      while (ADCSRA & (1 << ADSC)){}
+    }
+  }
+  chargeFlag = 0;
+}
+
 int main(void) {
-  
   // ------ variables ------ //
   volatile float voltageIn_a;
   volatile float voltageIn_b;
@@ -88,11 +128,9 @@ int main(void) {
   volatile float currentIn_a;
   volatile float currentIn_b;
   
-  volatile float voltageOut_a;
-  volatile float voltageOut_b;
+  volatile float voltageOut;
   volatile float currVoltOut;
-  volatile float currentOut_a;
-  volatile float currentOut_b;
+  volatile float currentOut;
   
   float d_u;
   float d_i:
@@ -103,31 +141,27 @@ int main(void) {
   initPWM(); 
   sei();
   initADC();
-  _delay_ms(200);    /* Wait for converter to stabilise */
+  _delay_ms(100);    /* Wait for converter to stabilise */
   
   for (i = 0; i < 3; i++) {             /*  sample adc once to set "a" values to a non-zero value */
-        while (ADCSRA & (1 << ADSC)){ 
-        }
-    }
+      ADCSRA |= (1 << ADSC);                  /*  start conversion  */
+      while (ADCSRA & (1 << ADSC)){}
+  }
   
   // ------ Event loop ------ //
   while (1) {
     for (i = 0; i < 3; i++) {             /*  adc sample */
-        while (ADCSRA & (1 << ADSC)){ 
-        }
+        ADCSRA |= (1 << ADSC);
+        while (ADCSRA & (1 << ADSC)){}
     }
     // State monitoring.
     // First check is battery is being charged or not.
     // If so, check the current state, whether CC, CV or charge done.
     if(chargeFlag){
         if(voltageOut_b >= VCHARGE){
-          if(currentOut_b < IBAT_THRESHOLD){
-            chargeFlag = 0;
-          } else {
-            // Call CV mode
-          }
+          cvMode(); // This is CV mode
         } else {
-          // Call MPPT
+          MPPT();   // This is CC mode
         }
     }
     // If not charging, check if charging needs to start because of low voltage.
@@ -135,9 +169,9 @@ int main(void) {
     else{
         if(voltageOut_b < VBAT_LOW){
           chargeFlag = 1;
-          // Call MPPT
+          MPPT();
         } else {
-          // Call MPPT
+          MPPT();
         }
     }
     _delay_ms(200);
