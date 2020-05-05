@@ -134,7 +134,6 @@ int main(void) {
   
   float d_u;
   float d_i:
-  float D = 0.01;
   int chargeFlag;
 
   // -------- Inits --------- //
