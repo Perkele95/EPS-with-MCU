@@ -90,30 +90,22 @@ ISR(ADC_vect){
     }
 }
 
-// MPPT function sets new duty cycle
+// MPPT function sets the duty cycle
 void MPPT(void){
   d_u = voltageIn_b - voltageIn_a;
   d_i = currentIn_b - currentIn_a;
   if(d_u == 0){
-    if(d_i == 0){
-        // do nothing
-      } else {
-        if(d_i > 0){
-          OCR1A -= 1;
-        } else {
-          OCR1A += 1;
-        }
-      }
-  } else {
-    if((d_i/d_u) == (-(currentIn_b/voltageIn_b))){
-      // do nothing
-    } else {
-      if((d_i/d_u) > (-(currentIn_b/voltageIn_b))){
+    if(d_i > 0){
         OCR1A -= 1;
-      } else {
+      } else if(d_i < 0){
         OCR1A += 1;
       }
-    }
+  } else {
+      if((d_i/d_u) > (-(currentIn_b/voltageIn_b))){
+        OCR1A -= 1;
+      } else if((d_i/d_u) < (-(currentIn_b/voltageIn_b))){
+        OCR1A += 1;
+      }
   }
 }
 
