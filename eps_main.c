@@ -10,7 +10,7 @@
 
 /* Note: REF_VCC is the internal voltage. */
 #define REF_VCC 1.1
-#define VOLTAGE_DIV_FACTOR  6      /* measured division by voltage divider */
+#define VOLTAGE_DIV_FACTOR  9      /* measured division by voltage divider */
 #define RSENSE 0.01
 #define VBAT_LOW 5.6
 #define VCHARGE 7.2
